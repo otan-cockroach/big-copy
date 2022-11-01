@@ -1,4 +1,4 @@
-module github.com/cockroachlabs/big-copy
+module github.com/otan-cockroach/big-copy
 
 go 1.19
 

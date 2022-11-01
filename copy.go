@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-var maxRows = flag.Int("max_rows", 1000000, "maximum number of rows to insert")
+var maxRows = flag.Int("max_rows", 10000, "maximum number of rows to insert")
+var insertTimes = flag.Int("insert_times", 10000, "maximum number of rows to insert")
 var jsonSize = flag.Int("json_size", 64*1024*1024, "size of generated JSON blobs")
 var dbUrl = flag.String("db", "postgresql://root@localhost:26257/defaultdb?sslmode=disable", "db url")
 
@@ -40,15 +41,17 @@ func main() {
 	if err != nil {
 		panic(errors.Wrapf(err, "failing generating json"))
 	}
-	s := &copyFromSource{
-		str: j,
+	for i := 0; i < *insertTimes; i++ {
+		fmt.Printf("beginning copy iteration %d\n", i+1)
+		s := &copyFromSource{
+			str: j,
+		}
+		r, err := conn.CopyFrom(ctx, pgx.Identifier{"test_table"}, []string{"id", "data"}, s)
+		if err != nil {
+			panic(errors.Wrapf(err, "failed to copy at %d rows", s.rowsInserted))
+		}
+		fmt.Printf("done with batch %d; copied %d rows\n", i+1, r)
 	}
-	fmt.Printf("beginning copy process\n")
-	r, err := conn.CopyFrom(ctx, pgx.Identifier{"test_table"}, []string{"id", "data"}, s)
-	if err != nil {
-		panic(errors.Wrapf(err, "failed to copy at %d rows", s.rowsInserted))
-	}
-	fmt.Printf("copied %d rows\n", r)
 }
 
 type copyFromSource struct {
@@ -58,9 +61,6 @@ type copyFromSource struct {
 
 func (c *copyFromSource) Next() bool {
 	c.rowsInserted++
-	if c.rowsInserted%100 == 0 {
-		fmt.Printf("copied %d rows\n", c.rowsInserted)
-	}
 	return c.rowsInserted < (*maxRows + 1)
 }
 
