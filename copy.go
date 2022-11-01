@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
-	"strings"
 )
 
-var maxRows = flag.Int("max_rows", 10000, "maximum number of rows to insert")
-var insertTimes = flag.Int("insert_times", 10000, "maximum number of rows to insert")
-var jsonSize = flag.Int("json_size", 64*1024*1024, "size of generated JSON blobs")
+var maxRows = flag.Int("max_rows", 120, "maximum number of rows to insert per batch")
+var insertTimes = flag.Int("insert_times", 500000, "amount of times max_rows is inserted")
+var jsonSize = flag.Int("json_size", 1*1024*1024, "size of generated JSON blobs")
 var dbUrl = flag.String("db", "postgresql://root@localhost:26257/defaultdb?sslmode=disable", "db url")
 
 // create table test_table(id int, data json);
@@ -35,9 +36,9 @@ func main() {
 	fmt.Printf("table truncated\n")
 
 	type jsonStruct struct {
-		str string
+		Str string `json:"str"`
 	}
-	j, err := json.Marshal(&jsonStruct{str: strings.Repeat("a", *jsonSize)})
+	j, err := json.Marshal(&jsonStruct{Str: strings.Repeat("a", *jsonSize)})
 	if err != nil {
 		panic(errors.Wrapf(err, "failing generating json"))
 	}
