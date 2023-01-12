@@ -2,21 +2,22 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/jackc/pgx/v4"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
 )
 
-var maxRows = flag.Int("max_rows", 120, "maximum number of rows to insert per batch")
-var insertTimes = flag.Int("insert_times", 500000, "amount of times max_rows is inserted")
-var jsonSize = flag.Int("json_size", 1*1024*1024, "size of generated JSON blobs")
+var maxRows = flag.Int("max_rows", 10000, "maximum number of rows to insert per batch")
+var insertTimes = flag.Int("insert_times", 3000, "amount of times max_rows is inserted")
 var dbUrl = flag.String("db", "postgresql://root@localhost:26257/defaultdb?sslmode=disable", "db url")
 
-// create table test_table(id int, data json);
+var counter = -999999999
+var increment = 10000
+
 func main() {
 	flag.Parse()
 
@@ -30,48 +31,39 @@ func main() {
 
 	fmt.Printf("connected to db\n")
 
-	if _, err := conn.Exec(ctx, "TRUNCATE TABLE test_table"); err != nil {
+	if _, err := conn.Exec(ctx, "DROP TABLE IF EXISTS test_table"); err != nil {
 		panic(errors.Wrapf(err, "failed to truncate table"))
 	}
-	fmt.Printf("table truncated\n")
+	fmt.Printf("table dropped\n")
+	if _, err := conn.Exec(ctx, "CREATE TABLE IF NOT EXISTS test_table (id INT8 PRIMARY KEY, i1 int, t1 timestamp(0), t2 timestamp(0), t3 timestamp(0), n TEXT, t varchar(2048), u varchar(512))"); err != nil {
+		panic(errors.Wrapf(err, "failed to truncate table"))
+	}
+	fmt.Printf("table created\n")
 
-	type jsonStruct struct {
-		Str string `json:"str"`
-	}
-	j, err := json.Marshal(&jsonStruct{Str: strings.Repeat("a", *jsonSize)})
-	if err != nil {
-		panic(errors.Wrapf(err, "failing generating json"))
-	}
+	rng := rand.New(rand.NewSource(0))
 	for i := 0; i < *insertTimes; i++ {
 		fmt.Printf("beginning copy iteration %d\n", i+1)
-		s := &copyFromSource{
-			str: j,
+		var sb strings.Builder
+		for it := 0; it < *maxRows; it++ {
+			sb.WriteString(fmt.Sprintf(
+				"%d,%d,%s,%s,%s,,%s,%s\n",
+				counter,
+				100,
+				"1970-01-01 00:00:00", "1970-01-01 00:00:00", "1970-01-01 00:00:00",
+				makeLenStr(rng.Intn(2048)),
+				makeLenStr(rng.Intn(512)),
+			))
+			counter += increment
 		}
-		r, err := conn.CopyFrom(ctx, pgx.Identifier{"test_table"}, []string{"id", "data"}, s)
+		r, err := conn.PgConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY test_table FROM STDIN CSV")
 		if err != nil {
-			panic(errors.Wrapf(err, "failed to copy at %d rows", s.rowsInserted))
+			panic(errors.Wrapf(err, "failed to copy"))
 		}
-		fmt.Printf("done with batch %d; copied %d rows\n", i+1, r)
+		fmt.Printf("done with batch %d; copied %d rows\n", i+1, r.RowsAffected())
 	}
+	fmt.Printf("complete!\n")
 }
 
-type copyFromSource struct {
-	rowsInserted int
-	str          []byte
-}
-
-func (c *copyFromSource) Next() bool {
-	c.rowsInserted++
-	return c.rowsInserted < (*maxRows + 1)
-}
-
-func (c *copyFromSource) Values() ([]interface{}, error) {
-	var ret []interface{}
-	ret = append(ret, c.rowsInserted)
-	ret = append(ret, c.str)
-	return ret, nil
-}
-
-func (c *copyFromSource) Err() error {
-	return nil
+func makeLenStr(i int) string {
+	return strings.Repeat("a", i)
 }
