@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var maxRows = flag.Int("max_rows", 10000, "maximum number of rows to insert per batch")
+var maxRows = flag.Int("max_rows", 100000, "maximum number of rows to insert per batch")
 var insertTimes = flag.Int("insert_times", 3000, "amount of times max_rows is inserted")
 var dbUrl = flag.String("db", "postgresql://root@localhost:26257/defaultdb?sslmode=disable", "db url")
 
